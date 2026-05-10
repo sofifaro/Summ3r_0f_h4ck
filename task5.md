@@ -68,7 +68,7 @@ openssl rand -hex 64
 ***Тип: SSRF in /api/admin/create_product***
 
 Риски:
-1. Доступ к внутренним сервисам и метаданным (Redis, docker, cloud services)
+1. Доступ к внутренним сервисам и метаданным (Redis, docker, cloud services), что иногда может привести к [RCE](https://www.assetnote.io/resources/research/a-glossary-of-blind-ssrf-chains)
 
 Эксплуатация:
 
@@ -283,42 +283,7 @@ def download(file_id):
 
 ---
 
-***Тип: Weak Password Hashing***
-
-Риски:
-1. При утечке бд атакующий может спокойно подобрать и скомпроментировать все пароли пользователей.
-
-Эксплуатация:
-Уязвимый код:
-```Python
-def hash_password(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
-```
-1. Получаем пароли и запускаем hashcat для подбора хешей. (```hashcat -m 1400 hashes.txt rockyou.txt```)
-2. После завершения работы тулзы, у нас на руках готовые пароли пользователей.
-
-Рекомендации по устранению:
-1. Использовать библиотеку argon, чтобы хешировать пароли, а не шифровать (сама библиотека уже использует соль и надежный алгоритм шифрования)
-```Python
-from argon2 import PasswordHasher
-
-ph = PasswordHasher()
-
-hashed = ph.hash(password)
-
-then..
-
-try:
-    ph.verify(hashed, password)
-except:
-    invalid_password()
-```
-2. Добавить сильную политику паролей, больше 10 символов, заглавные и строчные буквы, спец символы и тд.
-3. Добавить двухфакторную аутентификацию, таким образом, даже при утечке паролей, атакующим будет сложнее попасть в аккаунт.
-
----
-
-***Тип: Open Redirect in /go leads to XSS via CLRF injection***
+***Тип: Open Redirect in /go leads to XSS via CRLF injection***
 
 Риски:
 1. Через XSS можно украсть CSRF token (тк у нас httponly=False для него)
