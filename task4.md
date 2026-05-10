@@ -224,7 +224,7 @@ public async Task<IActionResult> ResetPassword([FromBody] PasswordResetConfirm r
 ***Тип: Server-Side Template Injection leads to RCE***
 
 **Риски:**
-1. Через RCE злоумышленник сможет несанкционированный доступ к инфраструктуре сервера (потом уже может повысить права, к примеру)
+1. Через RCE злоумышленник сможет получить несанкционированный доступ к инфраструктуре сервера (потом уже может повысить права, к примеру)
 
 
 **Эксплуатация:**
@@ -317,5 +317,3 @@ if (!string.IsNullOrWhiteSpace(req.Comment))
     template += "\n@Model.Comment"; 
 }
 ```
-
----
