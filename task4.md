@@ -309,3 +309,10 @@ Your salary in @Model.Month is @Model.Salary!
     return Ok(new { message = "Payslip email sent" });
 }
 ```
+
+---
+Цепочка, которую можно составить из этих уязвимостей:
+1. Забираем аккаунт у пользователя через Broken Access Control
+2. Через Local File Read читаем файлы связанные с PDF конвертером
+3. RCE через шаблон
+
